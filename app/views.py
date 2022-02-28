@@ -5,14 +5,28 @@ Werkzeug Documentation:  http://werkzeug.pocoo.org/documentation/
 This file creates your application.
 """
 import os
-from app import app
-from flask import render_template, request, redirect, url_for, flash, session, abort
+from app import app,config
+from flask import render_template, request, redirect, url_for, flash, session, abort,send_from_directory
 from werkzeug.utils import secure_filename
+from app.forms import UploadForm
 
 
 ###
 # Routing for your application.
 ###
+def get_uploaded_images():
+    lst=[]
+    rootdir = os.getcwd()
+    for subdir, dirs, files in os.walk(rootdir + app.config['UPLOAD_FOLDER'][1:]):
+        for file in files:
+            if str(file) != '.gitkeep':
+                lst.append(str(file))
+    
+    return lst
+
+
+
+
 
 @app.route('/')
 def home():
@@ -23,7 +37,7 @@ def home():
 @app.route('/about/')
 def about():
     """Render the website's about page."""
-    return render_template('about.html', name="Mary Jane")
+    return render_template('about.html', name="Brandon Hall")
 
 
 @app.route('/upload', methods=['POST', 'GET'])
@@ -32,20 +46,25 @@ def upload():
         abort(401)
 
     # Instantiate your form class
+    form = UploadForm()
 
     # Validate file upload on submit
-    if request.method == 'POST':
-        # Get file data and save to your uploads folder
+    if form.validate_on_submit():
+        if request.method == 'POST':
+            # Get file data and save to your uploads folder
+            file=form.file.data
+            filename = secure_filename(file.filename)
+            file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+            flash('File Saved', 'success')
+            return redirect(url_for('home'))
 
-        flash('File Saved', 'success')
-        return redirect(url_for('home'))
-
-    return render_template('upload.html')
+    return render_template('upload.html',form = form)
 
 
 @app.route('/login', methods=['POST', 'GET'])
 def login():
     error = None
+    form = UploadForm()
     if request.method == 'POST':
         if request.form['username'] != app.config['ADMIN_USERNAME'] or request.form['password'] != app.config['ADMIN_PASSWORD']:
             error = 'Invalid username or password'
@@ -54,7 +73,7 @@ def login():
             
             flash('You were logged in', 'success')
             return redirect(url_for('upload'))
-    return render_template('login.html', error=error)
+    return render_template('login.html', error=error, form = form)
 
 
 @app.route('/logout')
@@ -100,6 +119,18 @@ def page_not_found(error):
     """Custom 404 page."""
     return render_template('404.html'), 404
 
+
+@app.route('/uploads/<filename>')
+def get_image(filename):
+    return send_from_directory(os.path.join(os.getcwd(),app.config['UPLOAD_FOLDER']), filename)
+
+@app.route('/files')
+def files():
+    if not session.get('logged_in'):
+        abort(401)
+    lst = get_uploaded_images()
+    print(lst)
+    return render_template('files.html',lst=lst)
 
 if __name__ == '__main__':
     app.run(debug=True, host="0.0.0.0", port="8080")
